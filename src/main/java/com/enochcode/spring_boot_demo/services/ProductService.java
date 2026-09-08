@@ -1,0 +1,116 @@
+package com.enochcode.spring_boot_demo.services;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+
+import com.enochcode.spring_boot_demo.dto.ProductDto;
+import com.enochcode.spring_boot_demo.dto.ProductImageDto;
+import com.enochcode.spring_boot_demo.dto.ProductReviewDto;
+import com.enochcode.spring_boot_demo.entity.Product;
+import com.enochcode.spring_boot_demo.entity.ProductReview;
+import com.enochcode.spring_boot_demo.repository.ProductRepository;
+import com.enochcode.spring_boot_demo.repository.ProductReviewRepository;
+import com.enochcode.spring_boot_demo.spec.ProductSpecification;
+
+@Service
+public class ProductService {
+
+	@Autowired
+	private ProductRepository productRepository;
+
+	@Autowired
+	private ProductReviewRepository productReviewRepository;
+
+	public Map<String, Object> getAllProducts(int page, int size) {
+		Pageable pageable = PageRequest.of(page, size);
+		Page<Product> products = productRepository.findAll(pageable);
+
+		List<ProductDto> productDtos = products.stream().map(this::convertToDto).collect(Collectors.toList());
+
+		Map<String, Object> reponse = new HashMap();
+		reponse.put("products", productDtos);
+
+		reponse.put("totalProducts", products.getTotalElements());
+
+		return reponse;
+	}
+
+	public ProductDto convertToDto(Product product) {
+		ProductDto dto = new ProductDto();
+
+		dto.setId(product.getId());
+		dto.setName(product.getName());
+		dto.setPrice(product.getPrice());
+		dto.setDescription(product.getDescription());
+		dto.setRatings(product.getRatings());
+		dto.setCategory(product.getCategory());
+		dto.setSeller(product.getSeller());
+		dto.setStock(product.getStock());
+		dto.setNumOfReviews(product.getNumOfReviews());
+
+		List<ProductReviewDto> reviewDtos = product.getReviews().stream().map(review -> {
+			ProductReviewDto reviewDto = new ProductReviewDto();
+//			reviewDto.setProductId(review.getId());
+			reviewDto.setProductId(review.getProduct().getId());
+			reviewDto.setComment(review.getComment());
+			reviewDto.setRating(review.getRating());
+			return reviewDto;
+
+		}).collect(Collectors.toList());
+		dto.setReviews(reviewDtos);
+		dto.setNumOfReviews(reviewDtos.size());
+		
+		
+		//Product Image
+		List<ProductImageDto> imageDtos = product.getImages().stream().map(image -> {
+			ProductImageDto imageDto = new ProductImageDto(image.getUrl());
+			return imageDto;
+
+		}).collect(Collectors.toList());
+		dto.setImages(imageDtos);
+
+		return dto;
+
+	}
+
+	public Product getProductById(Long id) {
+		return productRepository.findById(id)
+				.orElseThrow(() -> new RuntimeException("Product not found with thid id" + id));
+	}
+
+	public List<Product> searchProducts(String category, Double minPrice, Double maxPrice, String keyword,
+			Double ratings) {
+
+		Specification<Product> spec = Specification.where(ProductSpecification.hasCategory(category))
+
+				.and(ProductSpecification.priceBetween(minPrice, maxPrice))
+				.and(ProductSpecification.hasNameOrDescriptionLike(keyword))
+				.and(ProductSpecification.ratingGreaterThan(ratings));
+
+		return productRepository.findAll(spec);
+	}
+
+	public void addReview(ProductReviewDto reviewDto) {
+		// TODO Auto-generated method stub
+
+		Product product = productRepository.findById(reviewDto.getProductId())
+				.orElseThrow(() -> new RuntimeException("Product not found"));
+
+		ProductReview review = new ProductReview();
+		review.setComment(reviewDto.getComment());
+		review.setRating(reviewDto.getRating());
+		review.setProduct(product);
+		productReviewRepository.save(review);
+
+	}
+
+}
